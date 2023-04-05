@@ -16,6 +16,7 @@ batchSize= 144*7 # how many data points are in batch
 lr = 0.025
 seqLength=144 # num of time values per input
 epochSize = 10
+N_SPLITS = 7 # num of training/validation splits
 
 # helper
 class extractTensor(nn.Module):
@@ -43,7 +44,7 @@ X = data.iloc[:, [1, 2, 3, 4, 5]]
 Y = data.iloc[:, [6]]
 assert len(X) == len(Y)
 
-skf = StratifiedKFold(n_splits=10)
+skf = StratifiedKFold(n_splits=N_SPLITS)
 MSEloss = nn.MSELoss()
 optimizer = SGD(model.parameters(), lr=lr)
 
@@ -52,7 +53,9 @@ Y = tensor(Y.values).float()
 average = mean([i.item() for i in Y])
 Y = [float(i.item()>average) for i in Y]
 
-#TODO use validation and testing data, this is just testing
+#TODO split into testing, then validation and training
+
+# K-fold splitting data into training and testing
 allLosses = []
 for i, (train_index, test_index) in enumerate(skf.split(X, Y)):
     
@@ -70,15 +73,16 @@ for i, (train_index, test_index) in enumerate(skf.split(X, Y)):
 
     mselist = []
     for j in range(epochSize):
-        pred = model(x)
+        pred = model(x).squeeze(1) # seems to increase auroc (SIGNIFICANTLY ~30-60%), don't know why, doesn't remove siez difference warning
 
         mse = MSEloss(pred, y)
-        
         mselist.append(mse.item())
 
         optimizer.zero_grad()
         mse.backward()
         optimizer.step()
+
+    #TODO testing data, should be validation, with testing reserved for final analysis
     with no_grad():
 
         xtest = pd.DataFrame()
@@ -92,13 +96,14 @@ for i, (train_index, test_index) in enumerate(skf.split(X, Y)):
         y = [Y[i] for i in test_index]
         y = tensor(y).float()
 
-        pred = model(xtest)
+        pred = model(xtest).squeeze(1)
 
         valmse = MSEloss(pred, y)
         print(f'Fold {i}, Total training MSE change: {mselist[0]-mselist[-1]}')
-        print(f'Fold {i}, Validation MSE / Total training MSE * 100: {valmse/mselist[-1]*100}')
+        print(f'Fold {i}, Validation MSE / Total training MSE * 100: {mselist[-1]/valmse*100}')
         print(f'Fold {i}, AUROC score: {roc_auc_score(y, pred)}')
-
-# TODO fix warnings
+        print('#################')
+        
 # TODO plot training loss as model is trained
 # TODO add average accuracy values over all folds
+# TODO write output to file
