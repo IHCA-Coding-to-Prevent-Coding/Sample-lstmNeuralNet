@@ -1,4 +1,5 @@
 from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.optim import SGD as SGD
 import pandas as pd
@@ -44,6 +45,9 @@ X = data.iloc[:, [1, 2, 3, 4, 5]]
 Y = data.iloc[:, [6]]
 assert len(X) == len(Y)
 
+# TODO train_test_split for validation / everything else
+#X, Xtest, Y,Ytest = train_test_split(X, Y, train_size=0.8)
+
 skf = StratifiedKFold(n_splits=N_SPLITS)
 MSEloss = nn.MSELoss()
 optimizer = SGD(model.parameters(), lr=lr)
@@ -52,8 +56,6 @@ optimizer = SGD(model.parameters(), lr=lr)
 Y = tensor(Y.values).float()
 average = mean([i.item() for i in Y])
 Y = [float(i.item()>average) for i in Y]
-
-#TODO split into testing, then validation and training
 
 # K-fold splitting data into training and testing
 allLosses = []
@@ -82,7 +84,6 @@ for i, (train_index, test_index) in enumerate(skf.split(X, Y)):
         mse.backward()
         optimizer.step()
 
-    #TODO testing data, should be validation, with testing reserved for final analysis
     with no_grad():
 
         xtest = pd.DataFrame()
@@ -99,11 +100,15 @@ for i, (train_index, test_index) in enumerate(skf.split(X, Y)):
         pred = model(xtest).squeeze(1)
 
         valmse = MSEloss(pred, y)
+        aucscores = []
+        aucscores.append(roc_auc_score(y, pred))
         print(f'Fold {i}, Total training MSE change: {mselist[0]-mselist[-1]}')
         print(f'Fold {i}, Validation MSE / Total training MSE * 100: {mselist[-1]/valmse*100}')
-        print(f'Fold {i}, AUROC score: {roc_auc_score(y, pred)}')
+        print(f'Fold {i}, AUROC score: {aucscores[-1]}')
         print('#################')
-        
-# TODO plot training loss as model is trained
-# TODO add average accuracy values over all folds
-# TODO write output to file
+
+scoremean = mean(aucscores)
+print(f'Average auroc score: {scoremean}')
+with open("Performance.txt", "a") as file:
+    file.writelines(f'Average Score: {scoremean}\n{model}\n####################\n')
+# TODO split validation data
